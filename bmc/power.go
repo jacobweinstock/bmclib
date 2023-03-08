@@ -3,6 +3,7 @@ package bmc
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
@@ -87,7 +88,7 @@ func SetPowerStateFromInterfaces(ctx context.Context, state string, generic []in
 }
 
 // getPowerState gets the power state for a BMC, trying all interface implementations passed in
-func getPowerState(ctx context.Context, p []powerProviders) (state string, metadata Metadata, err error) {
+func getPowerState(ctx context.Context, timeout time.Duration, p []powerProviders) (state string, metadata Metadata, err error) {
 Loop:
 	for _, elem := range p {
 		if elem.powerStateGetter == nil {
@@ -99,6 +100,11 @@ Loop:
 			break Loop
 		default:
 			metadata.ProvidersAttempted = append(metadata.ProvidersAttempted, elem.name)
+			if timeout != 0 {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, timeout)
+				defer cancel()
+			}
 			state, stateErr := elem.powerStateGetter.PowerStateGet(ctx)
 			if stateErr != nil {
 				err = multierror.Append(err, errors.WithMessagef(stateErr, "provider: %v", elem.name))
@@ -112,7 +118,7 @@ Loop:
 }
 
 // GetPowerStateFromInterfaces identifies implementations of the PostStateGetter interface and passes the found implementations to the getPowerState() wrapper.
-func GetPowerStateFromInterfaces(ctx context.Context, generic []interface{}) (state string, metadata Metadata, err error) {
+func GetPowerStateFromInterfaces(ctx context.Context, timeout time.Duration, generic []interface{}) (state string, metadata Metadata, err error) {
 	powerStateGetter := make([]powerProviders, 0)
 	for _, elem := range generic {
 		temp := powerProviders{name: getProviderName(elem)}
@@ -128,5 +134,5 @@ func GetPowerStateFromInterfaces(ctx context.Context, generic []interface{}) (st
 	if len(powerStateGetter) == 0 {
 		return state, metadata, multierror.Append(err, errors.New("no PowerStateGetter implementations found"))
 	}
-	return getPowerState(ctx, powerStateGetter)
+	return getPowerState(ctx, timeout, powerStateGetter)
 }

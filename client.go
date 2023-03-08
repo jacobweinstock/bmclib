@@ -5,9 +5,11 @@ package bmclib
 import (
 	"context"
 	"crypto/x509"
+	"fmt"
 	"io"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/bmc-toolbox/bmclib/v2/bmc"
 	"github.com/bmc-toolbox/bmclib/v2/internal/httpclient"
@@ -26,6 +28,7 @@ type Client struct {
 	Auth     Auth
 	Logger   logr.Logger
 	Registry *registrar.Registry
+	Timeout  func(context.Context) time.Duration
 	metadata *bmc.Metadata
 	mdLock   *sync.Mutex
 
@@ -80,6 +83,12 @@ func WithRedfishVersionsNotCompatible(versions []string) Option {
 	}
 }
 
+func WithTimeout(timeout time.Duration) Option {
+	return func(args *Client) {
+		args.Timeout = func(context.Context) time.Duration { return timeout }
+	}
+}
+
 // NewClient returns a new Client struct
 func NewClient(host, port, user, pass string, opts ...Option) *Client {
 	var defaultClient = &Client{
@@ -109,6 +118,12 @@ func NewClient(host, port, user, pass string, opts ...Option) *Client {
 		defaultClient.registerProviders()
 	}
 	defaultClient.mdLock = &sync.Mutex{}
+
+	if defaultClient.Timeout == nil {
+		fmt.Println("timeout is nil")
+		defaultClient.Timeout = defaultClient.defaultTimeout
+	}
+
 	return defaultClient
 }
 
@@ -140,6 +155,17 @@ func (c *Client) registerProviders() {
 	*/
 }
 
+func (c *Client) defaultTimeout(ctx context.Context) time.Duration {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return 0
+	}
+	v := time.Until(deadline)
+
+	return time.Duration(v / time.Duration(len(c.Registry.Drivers)))
+
+}
+
 // GetMetadata returns the metadata that is populated after each BMC function/method call
 func (c *Client) GetMetadata() bmc.Metadata {
 	if c.metadata != nil {
@@ -166,7 +192,8 @@ func (c *Client) setMetadata(metadata bmc.Metadata) {
 // from the client.Registry.Drivers. If client.Registry.Drivers ends up
 // being empty then we error.
 func (c *Client) Open(ctx context.Context) error {
-	ifs, metadata, err := bmc.OpenConnectionFromInterfaces(ctx, c.Registry.GetDriverInterfaces())
+	fmt.Println("default timeout: ", c.Timeout(ctx))
+	ifs, metadata, err := bmc.OpenConnectionFromInterfaces(ctx, c.Timeout(ctx), c.Registry.GetDriverInterfaces())
 	if err != nil {
 		return err
 	}
@@ -193,7 +220,9 @@ func (c *Client) Close(ctx context.Context) (err error) {
 
 // GetPowerState pass through to library function
 func (c *Client) GetPowerState(ctx context.Context) (state string, err error) {
-	state, metadata, err := bmc.GetPowerStateFromInterfaces(ctx, c.Registry.GetDriverInterfaces())
+	fmt.Println("1")
+	fmt.Println(c.Timeout(ctx))
+	state, metadata, err := bmc.GetPowerStateFromInterfaces(ctx, c.Timeout(ctx), c.Registry.GetDriverInterfaces())
 	c.setMetadata(metadata)
 	return state, err
 }

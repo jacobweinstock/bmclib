@@ -9,6 +9,7 @@ require (
 	github.com/google/go-cmp v0.5.8
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/jacobweinstock/go-amt v0.0.0-20221125040441-53475f4ae023
+	github.com/jacobweinstock/iamt v0.0.0-20230304043040-a6b4a1001123
 	github.com/jacobweinstock/registrar v0.4.6
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.8.1

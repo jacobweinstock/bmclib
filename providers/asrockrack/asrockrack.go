@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/x509"
+	"fmt"
 	"net/http"
 
 	"github.com/bmc-toolbox/bmclib/v2/constants"
@@ -111,7 +112,11 @@ func (a *ASRockRack) Compatible(ctx context.Context) bool {
 
 // Open a connection to a BMC, implements the Opener interface
 func (a *ASRockRack) Open(ctx context.Context) (err error) {
-	return a.httpsLogin(ctx)
+	fmt.Println("ASRockRack Open")
+	fmt.Println("BEFORE Open ctx err: ", ctx.Err())
+	err = a.httpsLogin(ctx)
+	fmt.Println("AFTER Open ctx err: ", ctx.Err())
+	return err
 }
 
 // Close a connection to a BMC, implements the Closer interface

@@ -146,7 +146,7 @@ func TestGetPowerState(t *testing.T) {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), tc.ctxTimeout)
 			defer cancel()
-			result, _, err := getPowerState(ctx, []powerProviders{{"test provider", &testImplementation, nil}})
+			result, _, err := getPowerState(ctx, time.Duration(0), []powerProviders{{"test provider", &testImplementation, nil}})
 			if err != nil {
 				diff := cmp.Diff(err.Error(), tc.err.Error())
 				if diff != "" {
@@ -186,7 +186,7 @@ func TestGetPowerStateFromInterfaces(t *testing.T) {
 				generic = []interface{}{&testImplementation}
 			}
 			expectedResult := tc.want
-			result, metadata, err := GetPowerStateFromInterfaces(context.Background(), generic)
+			result, metadata, err := GetPowerStateFromInterfaces(context.Background(), time.Duration(0), generic)
 			if err != nil {
 				if tc.err != nil {
 					diff := cmp.Diff(err.Error(), tc.err.Error())

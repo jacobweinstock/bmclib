@@ -3,6 +3,7 @@ package bmc
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
@@ -27,7 +28,7 @@ type connectionProviders struct {
 // OpenConnectionFromInterfaces will try all opener interfaces and remove failed ones.
 // The reason failed ones need to be removed is so that when other methods are called (like powerstate)
 // implementations that have connections wont nil pointer error when their connection fails.
-func OpenConnectionFromInterfaces(ctx context.Context, generic []interface{}) (opened []interface{}, metadata Metadata, err error) {
+func OpenConnectionFromInterfaces(ctx context.Context, timeout time.Duration, generic []interface{}) (opened []interface{}, metadata Metadata, err error) {
 	var metadataLocal Metadata
 Loop:
 	for _, elem := range generic {
@@ -44,6 +45,11 @@ Loop:
 		switch p := elem.(type) {
 		case Opener:
 			metadataLocal.ProvidersAttempted = append(metadataLocal.ProvidersAttempted, providerName)
+			if timeout != 0 {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, timeout)
+				defer cancel()
+			}
 			er := p.Open(ctx)
 			if er != nil {
 				err = multierror.Append(err, errors.WithMessagef(er, "provider: %v", providerName))
