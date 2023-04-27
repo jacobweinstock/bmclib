@@ -159,7 +159,8 @@ func (c *Client) registerProviders() {
 	c.Registry.Register(asrockrack.ProviderName, asrockrack.ProviderProtocol, asrockrack.Features, nil, driverAsrockrack)
 
 	// register gofish provider
-	driverGoFish := redfish.New(c.Auth.Host, c.Auth.Port, c.Auth.User, c.Auth.Pass, c.Logger, redfishwrapper.WithHTTPClient(c.httpClient), redfishwrapper.WithVersionsNotCompatible(c.redfishVersionsNotCompatible))
+	httpClient := *c.httpClient
+	driverGoFish := redfish.New(c.Auth.Host, c.Auth.Port, c.Auth.User, c.Auth.Pass, c.Logger, redfishwrapper.WithHTTPClient(&httpClient), redfishwrapper.WithVersionsNotCompatible(c.redfishVersionsNotCompatible))
 	c.Registry.Register(redfish.ProviderName, redfish.ProviderProtocol, redfish.Features, nil, driverGoFish)
 
 	// register AMT provider
