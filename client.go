@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bmc-toolbox/bmclib/v2/bmc"
+	"github.com/bmc-toolbox/bmclib/v2/internal/bmc"
 	"github.com/bmc-toolbox/bmclib/v2/internal/httpclient"
 	"github.com/bmc-toolbox/bmclib/v2/internal/redfishwrapper"
 	"github.com/bmc-toolbox/bmclib/v2/providers/asrockrack"
