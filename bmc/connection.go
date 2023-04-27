@@ -25,45 +25,79 @@ type connectionProviders struct {
 	closer Closer
 }
 
+type data struct {
+	err    error
+	opened interface{}
+	data   md
+}
+
+type md struct {
+	providerAttempted string
+	successfulOpen    bool
+}
+
+func doOpen(ctx context.Context, opener interface{}, opened chan data) {
+	var d data
+	switch p := opener.(type) {
+	case Opener:
+		providerName := getProviderName(opener)
+		d.data.providerAttempted = providerName
+		if err := p.Open(ctx); err != nil {
+			d.err = fmt.Errorf("provider: %v: %w", providerName, err)
+			break
+		}
+
+		d.data.successfulOpen = true
+		d.opened = opener
+	default:
+		d.err = fmt.Errorf("not an Opener implementation: %T", p)
+	}
+
+	opened <- d
+}
+
 // OpenConnectionFromInterfaces will try all opener interfaces and remove failed ones.
 // The reason failed ones need to be removed is so that when other methods are called (like powerstate)
 // implementations that have connections wont nil pointer error when their connection fails.
-func OpenConnectionFromInterfaces(ctx context.Context, timeout time.Duration, generic []interface{}) (opened []interface{}, metadata Metadata, err error) {
-	var metadataLocal Metadata
+func OpenConnectionFromInterfaces(ctx context.Context, timeout time.Duration, providers []interface{}) ([]interface{}, Metadata, error) {
+	dataChan := make(chan data, len(providers))
+	for _, provider := range providers {
+		tmpctx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		go func(ctx context.Context, opener interface{}, opened chan data) {
+			doOpen(ctx, opener, opened)
+		}(tmpctx, provider, dataChan)
+	}
 
-	for _, elem := range generic {
-		// return immediately if the context is done/terminated/etc
+	var err error
+	var opened []interface{}
+	var metadataLocal Metadata
+	for i := 0; i < len(providers); i++ {
 		select {
 		case <-ctx.Done():
 			err = multierror.Append(err, ctx.Err())
-			return nil, metadata, err
-		default:
-		}
-		// get the provider name for use in metadata
-		providerName := getProviderName(elem)
-		// now, try to open connections
-		switch p := elem.(type) {
-		case Opener:
-			metadataLocal.ProvidersAttempted = append(metadataLocal.ProvidersAttempted, providerName)
-			tmpctx, cancel := context.WithTimeout(ctx, timeout)
-			defer cancel()
-			er := p.Open(tmpctx)
-			if er != nil {
-				err = multierror.Append(err, errors.WithMessagef(er, "provider: %v", providerName))
-				continue
+			return nil, Metadata{}, err
+		case d, ok := <-dataChan:
+			if !ok {
+				err = multierror.Append(err, errors.New("data channel closed unexpectedly"))
+				break
 			}
-
-			opened = append(opened, elem)
-			metadataLocal.SuccessfulOpenConns = append(metadataLocal.SuccessfulOpenConns, providerName)
-
-		default:
-			e := fmt.Sprintf("not a Opener implementation: %T", p)
-			err = multierror.Append(err, errors.New(e))
+			if d.err != nil {
+				err = multierror.Append(err, d.err)
+			}
+			if d.opened != nil {
+				opened = append(opened, d.opened)
+			}
+			metadataLocal.ProvidersAttempted = append(metadataLocal.ProvidersAttempted, d.data.providerAttempted)
+			if d.data.successfulOpen {
+				metadataLocal.SuccessfulOpenConns = append(metadataLocal.SuccessfulOpenConns, d.data.providerAttempted)
+			}
 		}
 	}
 	if len(opened) == 0 {
 		return nil, metadataLocal, multierror.Append(err, errors.New("no Opener implementations found"))
 	}
+
 	return opened, metadataLocal, nil
 }
 

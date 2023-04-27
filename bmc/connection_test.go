@@ -47,6 +47,29 @@ func (p *connTester2) Name() string {
 	return "test provider 2"
 }
 
+type benchmark struct {
+	wait time.Duration
+}
+
+func (b *benchmark) Open(ctx context.Context) (err error) {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(b.wait):
+	}
+	return nil
+}
+
+func BenchmarkOpenConnectionFromInterfaces(b *testing.B) {
+	testImplementation := &benchmark{wait: time.Microsecond * 10000}
+	generic := []interface{}{testImplementation, testImplementation, testImplementation, testImplementation}
+	ctx, done := context.WithTimeout(context.Background(), time.Second*15)
+	defer done()
+	for i := 0; i < b.N; i++ {
+		_, _, _ = OpenConnectionFromInterfaces(ctx, time.Second*1, generic)
+	}
+}
+
 func TestOpenConnectionFromInterfaces(t *testing.T) {
 	testCases := map[string]struct {
 		err                   error
@@ -60,7 +83,7 @@ func TestOpenConnectionFromInterfaces(t *testing.T) {
 		"success with metadata":        {withMetadata: true},
 		"error context deadline":       {err: &multierror.Error{Errors: []error{errors.New("context deadline exceeded"), errors.New("no Opener implementations found")}}, ctxTimeout: time.Nanosecond * 1},
 		"error failed open":            {makeErrorOut: true, err: &multierror.Error{Errors: []error{errors.New("provider: test provider: open connection failed"), errors.New("no Opener implementations found")}}},
-		"no implementations found":     {badImplementation: true, err: &multierror.Error{Errors: []error{errors.New("not a Opener implementation: *struct {}"), errors.New("no Opener implementations found")}}},
+		"no implementations found":     {badImplementation: true, err: &multierror.Error{Errors: []error{errors.New("not an Opener implementation: *struct {}"), errors.New("no Opener implementations found")}}},
 		"multiple providers attempted": {withMultipleProviders: true},
 	}
 
